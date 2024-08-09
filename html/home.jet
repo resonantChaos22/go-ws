@@ -55,6 +55,7 @@
         </div>
         <div class="col-md-4">
           <h3>Who's Online?</h3>
+          <ul id="online_users"></ul>
         </div>
       </div>
     </div>
@@ -67,9 +68,16 @@
   <script>
     let socket = null;
     let chatbox = document.getElementById("output");
+    window.onbeforeunload = () => {
+      console.log("Leaving! Tata");
+      let jsonData = {};
+      jsonData["action"] = "left";
+      socket.send(JSON.stringify(jsonData));
+    };
 
     document.addEventListener("DOMContentLoaded", function () {
       socket = new WebSocket("ws://localhost:8080/ws");
+
       socket.onopen = () => {
         console.log("Connected to WebSocket");
       };
@@ -84,10 +92,41 @@
 
       socket.onmessage = (res) => {
         console.log(res.data);
-        let message = JSON.parse(res.data).message;
-        console.log(message);
-        chatbox.innerHTML = message;
+        let response = JSON.parse(res.data);
+        console.log("Action is ", response.action);
+
+        switch (response.action) {
+          case "list_users":
+            let ul = document.getElementById("online_users");
+            while (ul.firstChild) ul.removeChild(ul.firstChild);
+
+            if (response.connected_users.length > 0) {
+              response.connected_users.forEach((user) => {
+                let li = document.createElement("li");
+                li.innerHTML = `<span style="color: yellow">${user}</span>`;
+
+                ul.appendChild(li);
+              });
+            }
+            break;
+        }
+
+        let currHTML = chatbox.innerHTML;
+        if (response.message) {
+          currHTML = currHTML + response.message + "<br/>";
+        }
+        chatbox.innerHTML = currHTML;
       };
+
+      let userInput = document.getElementById("username");
+      userInput.addEventListener("change", () => {
+        let jsonData = {};
+        jsonData["action"] = "username";
+        jsonData["username"] = userInput.value;
+
+        console.log({ jsonData });
+        socket.send(JSON.stringify(jsonData));
+      });
     });
   </script>
 </html>

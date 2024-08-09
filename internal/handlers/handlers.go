@@ -31,10 +31,12 @@ var wsChan = make(chan WsPayload)
 var clients = make(map[WebSocketConnection]string)
 
 // type for response json that will be sent back to client
+// sends the list of connected users when required
 type WsJSONResponse struct {
-	Action      string `json:"action"`
-	Message     string `json:"message"`
-	MessageType string `json:"message_type"`
+	Action         string   `json:"action"`
+	Message        string   `json:"message"`
+	MessageType    string   `json:"message_type"`
+	ConnectedUsers []string `json:"connected_users"`
 }
 
 // type for a particular connection that is created by any client
@@ -68,16 +70,15 @@ func WsEndpoint(w http.ResponseWriter, r *http.Request) {
 		log.Println(err)
 	}
 
+	conn := WebSocketConnection{Conn: ws}
+	clients[conn] = ""
+
 	log.Println("Client connected to endpoint")
 
 	res := new(WsJSONResponse)
-	res.Message = "Connected!"
-
-	conn := WebSocketConnection{Conn: ws}
-	clients[conn] = "User"
-
-	log.Println()
-
+	res.Message = `<span style="color: cyan; font-style: italic;">Connected!</span>`
+	res.ConnectedUsers = getOnlineUsers()
+	res.Action = "list_users"
 	err = ws.WriteJSON(res)
 	if err != nil {
 		log.Println(err)
@@ -101,8 +102,9 @@ func ListenForWs(conn *WebSocketConnection) {
 	for {
 		err := conn.ReadJSON(payload)
 		if err != nil {
-			log.Println(err)
+			// log.Println(err)
 			//	do nothing
+			continue
 		}
 		payload.Conn = *conn
 		wsChan <- *payload
@@ -110,14 +112,39 @@ func ListenForWs(conn *WebSocketConnection) {
 }
 
 // goroutine to listen for any new payload and then broadcast it to all clients
+// based on "username" action, it adds associates a username with a connection
+// based on "left" action, it deletes the connection
 func ListenToWsChannel() {
 	response := new(WsJSONResponse)
-
+	var currClient string
 	for {
 		e := <-wsChan
 
-		response.Action = "Got Here"
-		response.Message = fmt.Sprintf("Some message for the action: %s", e.Action)
+		switch e.Action {
+		case "username":
+			currClient = clients[e.Conn]
+			clients[e.Conn] = e.Username
+			response.Action = "list_users"
+			if currClient == "" {
+				response.Message = fmt.Sprintf(`%s <span style="color: green; font-weight: bold;">joined!</span>`, e.Username)
+			} else {
+				response.Message = fmt.Sprintf(`%s<span style="color: cyan; font-weight: bold;"> is now </span>%s!`, currClient, e.Username)
+			}
+
+			response.ConnectedUsers = getOnlineUsers()
+
+		case "left":
+			if clients[e.Conn] != "" {
+				response.Message = fmt.Sprintf(`%s <span style="color: red; font-weight: bold;">left!</span>`, clients[e.Conn])
+			}
+			response.Action = "list_users"
+			delete(clients, e.Conn)
+			response.ConnectedUsers = getOnlineUsers()
+		default:
+			log.Println("Incorrect Action")
+			response.Action = "Got Here"
+			response.Message = fmt.Sprintf("Some message for the action: %s", e.Action)
+		}
 
 		broadcastToAll(response)
 	}
@@ -129,14 +156,27 @@ func broadcastToAll(response *WsJSONResponse) {
 	for client := range clients {
 		err := client.WriteJSON(response)
 		if err != nil {
-			log.Printf("websocket error for %s", clients[client])
+			log.Printf("websocket error for %s\n", clients[client])
 			_ = client.Close()
 			delete(clients, client)
 		}
 	}
 }
 
-// function to render any page using `ResponseWriter` to write the response, `tmpl` to get the template name inside `views`
+// gets the list of currently active users
+func getOnlineUsers() []string {
+	onlineUsers := []string{}
+	for _, onlineUser := range clients {
+		if onlineUser != "" {
+			onlineUsers = append(onlineUsers, onlineUser)
+		}
+	}
+
+	return onlineUsers
+}
+
+// function to render any page using `ResponseWriter` to write the response,
+// `tmpl` to get the template name inside `views`
 // and `data` to show any data during render
 func renderPage(w http.ResponseWriter, tmpl string, data jet.VarMap) error {
 	view, err := views.GetTemplate(tmpl)
