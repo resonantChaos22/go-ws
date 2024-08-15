@@ -18,6 +18,12 @@ func ListenForWs(conn *WebSocketConnection) {
 
 - If `recover()` is called within a deferred function, it can catch the panic, allowing the program to continue running or handle the error gracefully. However, if `recover()` is not used, the panic will cause the program to terminate.
 
+- Note that you can again call the function to run after it has been recovered.
+
 ## deleting keys from map
 
 - `delete(clients, client)`: we can use this syntax to delete a key from a map
+
+## notie
+
+- `notie` is a good notification library to send alerts. use `cdnjs` to get the required files

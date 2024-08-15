@@ -10,6 +10,13 @@
       integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
       crossorigin="anonymous"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/notie/4.3.1/notie.min.css"
+      integrity="sha512-UrjLcAek5jbj1vwGbXkviPHtgSNVNQCedX7cBIMDdSI2iZtUcZcoTh2Sqc8R9mVcijOjFUi1IlxhfrE1uWaIog=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
     <style>
       .chatbox {
         outline: 1px solid silver;
@@ -51,6 +58,16 @@
             />
           </div>
 
+          <hr />
+          <a
+            href="javascript:voiod(0)"
+            class="btn btn-outline-secondary"
+            id="sendBtn"
+            >Send Message</a
+          >
+          <div id="status" class="mt-2 float-end"></div>
+          <hr />
+
           <div id="output" class="chatbox"></div>
         </div>
         <div class="col-md-4">
@@ -65,6 +82,13 @@
     integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
     crossorigin="anonymous"
   ></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/notie/4.3.1/notie.min.js"
+    integrity="sha512-NHRCwRf2LnVSlLDejCA9oS3fG3/FLSQIPCjAWl3M7tVi5wszwr6FxkjotWnQDXLE+aLKcxRrzFDNEgXj9nvkPw=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"
+  ></script>
+  <script src="/static/reconnecting-websocket.min.js"></script>
   <script>
     let socket = null;
     let chatbox = document.getElementById("output");
@@ -76,18 +100,28 @@
     };
 
     document.addEventListener("DOMContentLoaded", function () {
-      socket = new WebSocket("ws://localhost:8080/ws");
+      socket = new ReconnectingWebSocket("ws://localhost:8080/ws", null, {
+        debug: true,
+        reconnectInterval: 3000,
+      });
+
+      const offline = `<span class="badge bg-danger">Not Connected</span>`;
+      const online = `<span class="badge bg-success">Connected</span>`;
+      let statusDiv = document.getElementById("status");
 
       socket.onopen = () => {
         console.log("Connected to WebSocket");
+        statusDiv.innerHTML = online;
       };
 
       socket.onclose = () => {
         console.log("Connection closed!");
+        statusDiv.innerHTML = offline;
       };
 
       socket.onerror = (err) => {
         console.log("There was an error");
+        statusDiv.innerHTML = offline;
       };
 
       socket.onmessage = (res) => {
@@ -127,6 +161,53 @@
         console.log({ jsonData });
         socket.send(JSON.stringify(jsonData));
       });
+
+      let messageInput = document.getElementById("message");
+      messageInput.addEventListener("keydown", (event) => {
+        if (event.code === "Enter") {
+          if (!socket) {
+            console.log("no connection");
+            return false;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          sendMessage();
+        }
+      });
+
+      let sendBtn = document.getElementById("sendBtn");
+      sendBtn.addEventListener("click", (event) => {
+        if (!socket) {
+          console.log("no connection");
+          return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        sendMessage();
+      });
     });
+
+    const sendMessage = () => {
+      let jsonData = {};
+      jsonData["action"] = "broadcast";
+      jsonData["username"] = document.getElementById("username").value;
+      jsonData["message"] = document.getElementById("message").value;
+      if (jsonData["username"] === "" || jsonData["message"] === "") {
+        notieAlert("Fill username and message first");
+        return;
+      }
+      socket.send(JSON.stringify(jsonData));
+      document.getElementById("message").value = "";
+    };
+
+    const notieAlert = (message) => {
+      notie.alert({
+        type: "error", // optional, default = 4, enum: [1, 2, 3, 4, 5, 'success', 'warning', 'error', 'info', 'neutral']
+        text: message,
+        stay: false, // optional, default = false
+        time: 5, // optional, default = 3, minimum = 1,
+        position: "top", // optional, default = 'top', enum: ['top', 'bottom']
+      });
+    };
   </script>
 </html>

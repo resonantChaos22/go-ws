@@ -94,6 +94,7 @@ func ListenForWs(conn *WebSocketConnection) {
 	defer func() {
 		if r := recover(); r != nil {
 			log.Println("Error - ", fmt.Sprintf("%+v", r))
+			//	TODO	Logic for handling the connection after error
 		}
 	}()
 
@@ -114,6 +115,7 @@ func ListenForWs(conn *WebSocketConnection) {
 // goroutine to listen for any new payload and then broadcast it to all clients
 // based on "username" action, it adds associates a username with a connection
 // based on "left" action, it deletes the connection
+// based on "broadcast" action, it sends the message along with sender to everyone
 func ListenToWsChannel() {
 	response := new(WsJSONResponse)
 	var currClient string
@@ -140,6 +142,10 @@ func ListenToWsChannel() {
 			response.Action = "list_users"
 			delete(clients, e.Conn)
 			response.ConnectedUsers = getOnlineUsers()
+
+		case "broadcast":
+			response.Action = "broadcast"
+			response.Message = fmt.Sprintf(`<span style="color: orange; font-weight: bold;">%s : </span>%s`, e.Username, e.Message)
 		default:
 			log.Println("Incorrect Action")
 			response.Action = "Got Here"
